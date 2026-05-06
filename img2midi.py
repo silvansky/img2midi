@@ -131,6 +131,15 @@ def main():
         pitches = scale_notes(args.key, args.scale, octaves=extra_oct)
     pitches = pitches[:rows]
 
+    max_rows = sum(1 for n in scale_notes(args.key, args.scale, octaves=11) if n <= 127)
+    if rows > max_rows:
+        min_block = -(-h // max_rows)
+        sys.exit(
+            f"block size {block}px yields {rows} pitch rows, but only {max_rows} "
+            f"fit in the MIDI range for key {args.key} {args.scale}. "
+            f"Use --block-size {min_block} or larger."
+        )
+
     grid = build_grid(img, block, rows, cols)
     velocities = np.vectorize(lambda b: brightness_to_velocity(b, args.threshold))(grid).astype(int)
 
