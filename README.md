@@ -23,6 +23,7 @@ img2midi <image> [options]
 | `--bpm` | `120` | tempo |
 | `-t, --threshold` | `0.01` | brightness fraction below which a block is silent |
 | `-o, --output` | `<image>.mid` | output path |
+| `--base-octave` | auto | lowest octave (auto-fits to MIDI range, prefers `3`) |
 
 Auto block size divides image height into 3 octaves of the chosen scale.
 

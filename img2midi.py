@@ -38,6 +38,20 @@ def scale_notes(key, scale, octaves=OCTAVES, base=BASE_OCTAVE):
     return [root_midi + o * 12 + i for o in range(octaves) for i in intervals]
 
 
+def fit_pitches(key, scale, rows, preferred_base=BASE_OCTAVE):
+    n_per_oct = len(SCALES[scale])
+    octaves = -(-rows // n_per_oct)
+    for base in range(preferred_base, -2, -1):
+        notes = scale_notes(key, scale, octaves=octaves, base=base)[:rows]
+        if notes and 0 <= min(notes) and max(notes) <= 127:
+            return notes, base
+    return None, None
+
+
+def max_rows_in_midi(key, scale):
+    return sum(1 for n in scale_notes(key, scale, octaves=12, base=-1) if 0 <= n <= 127)
+
+
 def brightness_to_velocity(b, threshold=0.0):
     if b / 255 <= threshold:
         return 0
@@ -60,6 +74,8 @@ def parse_args():
                    help="brightness fraction below which blocks are silent (default: 0.01)")
     p.add_argument("-o", "--output", default=None,
                    help="output MIDI path (default: <image>.mid)")
+    p.add_argument("--base-octave", type=int, default=None,
+                   help=f"lowest octave (default: auto, prefers {BASE_OCTAVE})")
     return p.parse_args()
 
 
@@ -126,19 +142,25 @@ def main():
     if rows == 0 or cols == 0:
         sys.exit("image too small for given block size")
 
-    if rows > n_pitch:
-        extra_oct = -(-rows // len(SCALES[args.scale]))
-        pitches = scale_notes(args.key, args.scale, octaves=extra_oct)
-    pitches = pitches[:rows]
-
-    max_rows = sum(1 for n in scale_notes(args.key, args.scale, octaves=11) if n <= 127)
-    if rows > max_rows:
-        min_block = -(-h // max_rows)
-        sys.exit(
-            f"block size {block}px yields {rows} pitch rows, but only {max_rows} "
-            f"fit in the MIDI range for key {args.key} {args.scale}. "
-            f"Use --block-size {min_block} or larger."
-        )
+    if args.base_octave is None:
+        pitches, base = fit_pitches(args.key, args.scale, rows)
+        if pitches is None:
+            max_rows = max_rows_in_midi(args.key, args.scale)
+            min_block = -(-h // max_rows)
+            sys.exit(
+                f"block size {block}px yields {rows} pitch rows, but only {max_rows} "
+                f"fit in the MIDI range for key {args.key} {args.scale}. "
+                f"Use --block-size {min_block} or larger."
+            )
+    else:
+        octaves = -(-rows // len(SCALES[args.scale]))
+        pitches = scale_notes(args.key, args.scale, octaves=octaves, base=args.base_octave)[:rows]
+        if not pitches or min(pitches) < 0 or max(pitches) > 127:
+            sys.exit(
+                f"--base-octave {args.base_octave} with {rows} rows of {args.scale} "
+                f"in {args.key} runs outside MIDI 0..127. "
+                f"Use a smaller base octave or a larger --block-size."
+            )
 
     grid = build_grid(img, block, rows, cols)
     velocities = np.vectorize(lambda b: brightness_to_velocity(b, args.threshold))(grid).astype(int)
